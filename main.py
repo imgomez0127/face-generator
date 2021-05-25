@@ -51,10 +51,10 @@ def train(directory, target_shape=(256, 256, 3), save_image=True):
         "subset": 'training'
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
+    output_signature=(tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
     img_dataset = Dataset.from_generator(
         img_iter_gen,
-        output_signature=(tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
-    )
+        output_signature=output_signature
     autoencoder = VAE(target_shape)
     optimizer = Adam(learning_rate=0.00001)
     autoencoder.compile(optimizer=optimizer, run_eagerly=True)
