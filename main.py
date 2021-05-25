@@ -53,11 +53,11 @@ def train(directory, target_shape=(256, 256, 3), save_image=True):
     img_iter_gen = get_iter(image_gen, iter_kwargs)
     img_dataset = Dataset.from_generator(
         img_iter_gen,
-        output_signature=(tf.TensorSpec(shape=(32, *target_shape), dtype=tf.float64))
+        output_signature=(tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
     )
     autoencoder = VAE(target_shape)
-    optimizer = Adam(learning_rate=0.001)
-    autoencoder.compile(optimizer=optimizer)
+    optimizer = Adam(learning_rate=0.00001)
+    autoencoder.compile(optimizer=optimizer, run_eagerly=True)
     history = autoencoder.fit(
         x=img_dataset,
         steps_per_epoch=32,
