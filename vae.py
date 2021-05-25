@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow.math as tfm
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2d, Conv2DTranspose, Flatten, Dense, Layer, Reshape
+
 class Sampling(Layer):
 
     def call(self, inputs):
@@ -16,7 +17,9 @@ class Sampling(Layer):
 def kl_loss(mu, sigma_log):
     return -0.5 * tfm.reduce_mean(1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log), axis=-1)
 
-def compute_conv_shape(image_shape, conv_amt, conv_size = (3,3)):
+def compute_conv_shape(image_shape, conv_amt, conv_size=None):
+    if not conv_size:
+        conv_size = (3, 3)
     height, width, *rest = image_shape
     for _ in range(conv_amt):
         height -= conv_size-1
@@ -29,6 +32,7 @@ class Encoder(Layer):
         super().__init__()
         self.convs = [Conv2d(3, 3, padding='same') for _ in range(conv_amt)]
         self.dense = Dense(middle_dim)
+        self.flatten = Flatten()
         self.latent_mu = Dense(latent_dim)
         self.latent_sig = Dense(latent_dim)
 
@@ -36,7 +40,8 @@ class Encoder(Layer):
         conv_output = inputs
         for conv_layer in self.convs:
             conv_output = conv_layer(conv_output)
-        intermediate_output = self.dense(conv_output)
+        flatten_output = self.flatten(conv_output)
+        intermediate_output = self.dense(flatten_output)
         mu = self.latent_mu(intermediate_output)
         log_sigma = self.latent_sig(intermediate_output)
         return mu, log_sigma
@@ -63,11 +68,12 @@ class Decoder(Layer):
 
 class VAE(Model):
 
-    def __init__(self, image_shape, conv_amt=3):
+    def __init__(self, image_shape, conv_amt=3, regularization_weight=0.001):
         super().__init__()
         self.post_conv_shape = compute_conv_shape(image_shape, conv_amt)
         self.encoder = Encoder(conv_amt=3)
         self.decoder = Decoder(image_shape, conv_amt=3)
+        self.regularization_weight = regularization_weight
 
     def call(self, inputs):
         encoder_output = self.encoder(inputs)
