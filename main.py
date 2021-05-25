@@ -3,6 +3,7 @@
 import argparse
 import tensorflow as tf
 import tensorflow.math as tfm
+from tensorflow.data import Dataset
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from vae import VAE
@@ -28,7 +29,10 @@ def parse_args():
     parser.add_argument("--directory", type=str, help="Directory with training images")
     return parser.parse_args()
 
-
+def get_iter(generator, kwargs):
+    def f():
+        return generator.flow_from_directory(**kwargs)
+    return f
 def train(directory, target_shape=(256, 256, 3), save_image=True):
     save_dir = "./modified-faces" if save_image else None
     image_gen = ImageDataGenerator(
@@ -36,32 +40,27 @@ def train(directory, target_shape=(256, 256, 3), save_image=True):
         rescale=1.0/255,
         validation_split=0.2
     )
-    valid_image_gen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
-    image_iter = image_gen.flow_from_directory(
-        directory=directory,
-        target_size=target_shape[:2],
-        class_mode=None,
-        seed=218,
-        save_to_dir=save_dir,
-        save_prefix="test",
-        save_format="jpeg",
-        subset='training'
-    )
-    valid_image_iter = valid_image_gen.flow_from_directory(
-        directory=directory,
-        target_size=target_shape[:3],
-        class_mode=None,
-        seed=218,
-        subset='validation'
+    iter_kwargs = {
+        "directory": directory,
+        "target_size": target_shape[:2],
+        "class_mode": None,
+        "seed": 218,
+        "save_to_dir": save_dir,
+        "save_prefix": "test",
+        "save_format": "jpeg",
+        "subset": 'training'
+    }
+    img_iter_gen = get_iter(image_gen, iter_kwargs)
+    img_dataset = Dataset.from_generator(
+        img_iter_gen,
+        output_signature=(tf.TensorSpec(shape=(32, *target_shape), dtype=tf.float64))
     )
     autoencoder = VAE(target_shape)
     optimizer = Adam(learning_rate=0.001)
     autoencoder.compile(optimizer=optimizer)
     history = autoencoder.fit(
-        x=image_iter,
-        validation_data=valid_image_iter,
-        steps_per_epoch=image_iter.samples,
-        validation_steps=valid_image_iter.samples,
+        x=img_dataset,
+        steps_per_epoch=32,
         epochs=20
     )
     autoencoder.save("models/my_model.h5")

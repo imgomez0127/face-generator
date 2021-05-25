@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 import tensorflow as tf
 import tensorflow.math as tfm
+from tensorflow import keras
 from tensorflow.keras import Model
 from tensorflow.keras.metrics import Mean
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, Flatten, Dense, Layer, Reshape, Input
+from tensorflow.keras.losses import BinaryCrossentropy
 
 class Sampling(Layer):
 
     def call(self, inputs):
         mu, sigma_log = inputs
-        print(sigma_log.shape)
         eps = tf.random.normal(sigma_log.shape)
         sigma = tfm.exp(sigma_log * 0.5)
         sigma = sigma * eps
-        print((mu+sigma).shape)
         return mu + sigma
 
 
 def kl_loss(mu, sigma_log):
-    return -0.5 * tfm.reduce_mean(1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log), axis=-1)
-
-def reconstruction_loss(x, y):
-    return tfm.reduce_mean(tf.keras.binary_crossentropy(x, y))
+    return -0.5 * tfm.reduce_mean(1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log))
 
 def compute_conv_shape(image_shape, conv_amt, conv_size=None):
     if not conv_size:
@@ -81,6 +78,7 @@ class VAE(Model):
         self.decoder = Decoder(image_shape, conv_amt=conv_amt)
         self.regularization_weight = regularization_weight
         self.loss_tracker = Mean(name='loss')
+        self.bce_loss = BinaryCrossentropy()
 
     def call(self, inputs):
         encoder_output = self.encoder(inputs)
@@ -90,11 +88,10 @@ class VAE(Model):
     def train_step(self, data):
         with tf.GradientTape() as tape:
             reconstruction = self(data, training=True)
-            loss = reconstruction_loss(data, reconstruction)
+            loss = self.bce_loss(data, reconstruction)
             loss += self.regularization_weight * sum(self.losses)
-        trainable_vars = self.trainable_vars
-        gradients = tape.gradient(loss, trainable_vars)
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        gradients = tape.gradient(loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
         self.loss_tracker.update_state(loss)
         return {"loss": self.loss_tracker.result()}
 

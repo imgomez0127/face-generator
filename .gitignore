@@ -141,3 +141,4 @@ cython_debug/
 /mtcnn
 key.txt
 celebs.org
+*.jpeg
