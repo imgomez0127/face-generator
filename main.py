@@ -3,6 +3,7 @@
 import argparse
 import tensorflow as tf
 import tensorflow.math as tfm
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.data import Dataset
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -51,17 +52,20 @@ def train(directory, target_shape=(256, 256, 3), save_image=True):
         "subset": 'training'
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
-    output_signature=(tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
+    output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
     img_dataset = Dataset.from_generator(
         img_iter_gen,
         output_signature=output_signature
+    )
     autoencoder = VAE(target_shape)
     optimizer = Adam(learning_rate=0.00001)
+    early_stop = EarlyStopping(monitor='loss', min_delta=0.0001, patience=10, restore_best_weights=True)
     autoencoder.compile(optimizer=optimizer, run_eagerly=True)
     history = autoencoder.fit(
         x=img_dataset,
         steps_per_epoch=32,
-        epochs=20
+        epochs=200,
+        callbacks=[early_stop]
     )
     autoencoder.save("models/my_model.h5")
     return autoencoder, history
