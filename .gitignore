@@ -142,3 +142,4 @@ cython_debug/
 key.txt
 celebs.org
 *.jpeg
+/models

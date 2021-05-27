@@ -11,7 +11,8 @@ class Sampling(Layer):
 
     def call(self, inputs):
         mu, sigma_log = inputs
-        eps = tf.random.normal(sigma_log.shape)
+        batches, width = sigma_log.shape
+        eps = tf.random.normal((batches, width))
         sigma = tfm.exp(sigma_log * 0.5)
         sigma = sigma * eps
         return mu + sigma
@@ -31,10 +32,12 @@ def compute_conv_shape(image_shape, conv_amt, conv_size=None):
 
 class Encoder(Layer):
 
-    def __init__(self, conv_amt=3, middle_dim=256, latent_dim=128):
+    def __init__(self, conv_amt=5, dense_amt=5, middle_dim=256, latent_dim=128):
         super().__init__()
-        self.convs = [Conv2D(3, 3, padding='same') for _ in range(conv_amt)]
-        self.dense = Dense(middle_dim)
+        self.convs = [Conv2D(3, 3, padding='same', activation='relu')
+                      for _ in range(conv_amt)]
+        self.dense_layers = [Dense(middle_dim, activation='relu')
+                             for _ in range(dense_amt)]
         self.flatten = Flatten()
         self.latent_mu = Dense(latent_dim)
         self.latent_sig = Dense(latent_dim)
@@ -43,28 +46,31 @@ class Encoder(Layer):
         conv_output = inputs
         for conv_layer in self.convs:
             conv_output = conv_layer(conv_output)
-        flatten_output = self.flatten(conv_output)
-        intermediate_output = self.dense(flatten_output)
+        intermediate_output = self.flatten(conv_output)
+        for dense in self.dense_layers:
+            intermediate_output = dense(intermediate_output)
         mu = self.latent_mu(intermediate_output)
         log_sigma = self.latent_sig(intermediate_output)
         return mu, log_sigma
 
 class Decoder(Layer):
 
-    def __init__(self, image_shape, conv_amt=3, middle_dim=256):
+    def __init__(self, image_shape, conv_amt=5, dense_amt=5, middle_dim=256):
         super().__init__()
         flatten_shape = int(tfm.reduce_prod(image_shape).numpy())
-        self.transpose_convs = [Conv2DTranspose(3, 3, padding='same')
-                                for _ in range(conv_amt)]
-        self.dense = Dense(middle_dim)
-        self.dense2 = Dense(flatten_shape)
+        self.transpose_convs = [Conv2DTranspose(3, 3, padding='same', activation="relu")
+                                for _ in range(conv_amt-1)]
+        output_layer = [Conv2DTranspose(3, 3, padding='same')]
+        self.transpose_convs = output_layer + self.transpose_convs
+        self.dense_layers = [Dense(middle_dim, activation='relu')
+                             for _ in range(dense_amt)]
+        self.dense2 = Dense(flatten_shape, activation='relu')
         self.reshape = Reshape(image_shape)
-        self.sampling = Sampling()
 
     def call(self, inputs):
-        sampled_vector = self.sampling(inputs)
-        dense_output = self.dense(sampled_vector)
-        dense_output2 = self.dense2(dense_output)
+        for dense in self.dense_layers:
+            inputs = dense(inputs)
+        dense_output2 = self.dense2(inputs)
         transpose_conv_output = self.reshape(dense_output2)
         for transpose_conv in reversed(self.transpose_convs):
             transpose_conv_output = transpose_conv(transpose_conv_output)
@@ -72,18 +78,20 @@ class Decoder(Layer):
 
 class VAE(Model):
 
-    def __init__(self, image_shape, conv_amt=3, regularization_weight=0.001):
+    def __init__(self, image_shape, conv_amt=5, regularization_weight=1e-3):
         super().__init__()
         self.encoder = Encoder(conv_amt=conv_amt)
         self.decoder = Decoder(image_shape, conv_amt=conv_amt)
         self.regularization_weight = regularization_weight
         self.loss_tracker = Mean(name='loss')
         self.bce_loss = BinaryCrossentropy()
+        self.sampling = Sampling()
 
     def call(self, inputs):
         encoder_output = self.encoder(inputs)
         self.add_loss(kl_loss(*encoder_output))
-        return self.decoder(encoder_output)
+        sampled_input = self.sampling(encoder_output)
+        return self.decoder(sampled_input)
 
     def train_step(self, data):
         with tf.GradientTape() as tape:
