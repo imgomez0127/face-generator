@@ -34,7 +34,7 @@ def get_iter(generator, kwargs):
     def f():
         return generator.flow_from_directory(**kwargs)
     return f
-def train(directory, target_shape=(256, 256, 3), save_image=True):
+def train(directory, target_shape=(256, 256, 3), save_image=False):
     save_dir = "./modified-faces" if save_image else None
     image_gen = ImageDataGenerator(
         horizontal_flip=True,
@@ -67,9 +67,13 @@ def train(directory, target_shape=(256, 256, 3), save_image=True):
         epochs=100,
         callbacks=[early_stop]
     )
-    autoencoder.save_weights("models/vae_model", save_format="tf")
+    autoencoder.compile(optimizer=optimizer)
+    autoencoder.save_weights("models/vae_model.h5")
     return autoencoder, history
 
+def test(target_shape=(256, 256, 3), save_iamge=False):
+    #TODO implement testing function
+    pass
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
