@@ -19,7 +19,8 @@ class Sampling(Layer):
 
 
 def kl_loss(mu, sigma_log):
-    return -0.5 * tfm.reduce_mean(1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log))
+    difference = 1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log)
+    return -0.5 * tfm.reduce_mean(difference)
 
 def compute_conv_shape(image_shape, conv_amt, conv_size=None):
     if not conv_size:
@@ -59,9 +60,7 @@ class Decoder(Layer):
         super().__init__()
         flatten_shape = int(tfm.reduce_prod(image_shape).numpy())
         self.transpose_convs = [Conv2DTranspose(3, 3, padding='same', activation="relu")
-                                for _ in range(conv_amt-1)]
-        output_layer = [Conv2DTranspose(3, 3, padding='same')]
-        self.transpose_convs = output_layer + self.transpose_convs
+                                for _ in range(conv_amt)]
         self.dense_layers = [Dense(middle_dim, activation='relu')
                              for _ in range(dense_amt)]
         self.dense2 = Dense(flatten_shape, activation='relu')
@@ -78,10 +77,23 @@ class Decoder(Layer):
 
 class VAE(Model):
 
-    def __init__(self, image_shape, conv_amt=5, regularization_weight=1e-3):
+    def __init__(self, image_shape, conv_amt=5, dense_amt=5,
+                 regularization_weight=1e-3, middle_dim=256, latent_dim=128):
         super().__init__()
-        self.encoder = Encoder(conv_amt=conv_amt)
-        self.decoder = Decoder(image_shape, conv_amt=conv_amt)
+        self.latent_dim = 128
+        self.image_shape = image_shape
+        self.encoder = Encoder(
+            conv_amt=conv_amt,
+            dense_amt=dense_amt,
+            latent_dim=latent_dim,
+            middle_dim=middle_dim
+        )
+        self.decoder = Decoder(
+            image_shape,
+            conv_amt=conv_amt,
+            dense_amt=dense_amt,
+            middle_dim=middle_dim
+        )
         self.regularization_weight = regularization_weight
         self.loss_tracker = Mean(name='loss')
         self.bce_loss = BinaryCrossentropy()
@@ -92,6 +104,15 @@ class VAE(Model):
         self.add_loss(kl_loss(*encoder_output))
         sampled_input = self.sampling(encoder_output)
         return self.decoder(sampled_input)
+
+    def generate_image(self, sigma_log=None, mu=None):
+        if mu is None:
+            mu = tf.random.uniform(shape=[1, self.latent_dim])
+        if sigma_log is None:
+            sigma_log = tf.random.uniform(shape=[1, self.latent_dim])
+        inputs = (mu, sigma_log)
+        sampled_vector = self.sampling(inputs)
+        return self.decoder(sampled_vector)
 
     def train_step(self, data):
         with tf.GradientTape() as tape:
