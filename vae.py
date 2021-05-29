@@ -3,8 +3,10 @@ import tensorflow as tf
 import tensorflow.math as tfm
 from tensorflow import keras
 from tensorflow.keras import Model
+from tensorflow.keras.activations import relu
 from tensorflow.keras.metrics import Mean
-from tensorflow.keras.layers import Conv2D, Conv2DTranspose, Flatten, Dense, Layer, Reshape, Input
+from tensorflow.keras.layers import Conv2D, Conv2DTranspose, Flatten, Dense, Layer, Reshape
+from tensorflow.keras.layers import BatchNormalization as BatchNorm
 from tensorflow.keras.losses import BinaryCrossentropy
 
 class Sampling(Layer):
@@ -35,9 +37,9 @@ class Encoder(Layer):
 
     def __init__(self, conv_amt=5, dense_amt=5, middle_dim=256, latent_dim=128):
         super().__init__()
-        self.convs = [Conv2D(3, 3, padding='same', activation='relu')
+        self.convs = [(Conv2D(3, 3, padding='same'), BatchNorm())
                       for _ in range(conv_amt)]
-        self.dense_layers = [Dense(middle_dim, activation='relu')
+        self.dense_layers = [(Dense(middle_dim), BatchNorm())
                              for _ in range(dense_amt)]
         self.flatten = Flatten()
         self.latent_mu = Dense(latent_dim)
@@ -45,35 +47,37 @@ class Encoder(Layer):
 
     def call(self, inputs):
         conv_output = inputs
-        for conv_layer in self.convs:
-            conv_output = conv_layer(conv_output)
+        for conv_layer, norm in self.convs:
+            conv_output = relu(norm(conv_layer(conv_output)))
         intermediate_output = self.flatten(conv_output)
-        for dense in self.dense_layers:
-            intermediate_output = dense(intermediate_output)
+        for dense, norm in self.dense_layers:
+            intermediate_output = relu(norm(dense(intermediate_output)))
         mu = self.latent_mu(intermediate_output)
-        log_sigma = self.latent_sig(intermediate_output)
-        return mu, log_sigma
+        sigma_log = self.latent_sig(intermediate_output)
+        return mu, sigma_log
 
 class Decoder(Layer):
 
     def __init__(self, image_shape, conv_amt=5, dense_amt=5, middle_dim=256):
         super().__init__()
         flatten_shape = int(tfm.reduce_prod(image_shape).numpy())
-        self.transpose_convs = [Conv2DTranspose(3, 3, padding='same', activation="relu")
+        self.transpose_convs = [(Conv2DTranspose(3, 3, padding='same'), BatchNorm())
                                 for _ in range(conv_amt)]
-        self.dense_layers = [Dense(middle_dim, activation='relu')
+        self.output_layer = Conv2DTranspose(3, 3, padding='same')
+        self.dense_layers = [(Dense(middle_dim), BatchNorm())
                              for _ in range(dense_amt)]
-        self.dense2 = Dense(flatten_shape, activation='relu')
+        self.dense2 = Dense(flatten_shape)
         self.reshape = Reshape(image_shape)
 
     def call(self, inputs):
-        for dense in self.dense_layers:
-            inputs = dense(inputs)
-        dense_output2 = self.dense2(inputs)
+        for dense, norm in self.dense_layers:
+            inputs = relu(norm(dense(inputs)))
+        dense_output2 = relu(self.dense2(inputs))
         transpose_conv_output = self.reshape(dense_output2)
-        for transpose_conv in reversed(self.transpose_convs):
-            transpose_conv_output = transpose_conv(transpose_conv_output)
-        return transpose_conv_output
+        for transpose_conv, norm in reversed(self.transpose_convs):
+            transpose_conv_output = norm(transpose_conv(transpose_conv_output))
+            transpose_conv_output = relu(transpose_conv_output)
+        return relu(self.output_layer(transpose_conv_output))
 
 class VAE(Model):
 
