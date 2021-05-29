@@ -74,7 +74,7 @@ def train(directory, target_shape=(256, 256, 3), save_image=False):
         output_signature=output_signature
     )
     autoencoder = VAE(target_shape, regularization_weight=1e-3, **vae_kwargs)
-    optimizer = RMSprop(learning_rate=1e-3)
+    optimizer = Adam(learning_rate=1e-3)
     early_stop = EarlyStopping(
         monitor='loss',
         min_delta=0.01,
