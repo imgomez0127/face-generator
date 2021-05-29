@@ -13,8 +13,8 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from vae import VAE
 
 vae_kwargs = {
-    "conv_amt": 10,
-    "dense_amt": 5,
+    "conv_amt": 5,
+    "dense_amt": 10,
     "middle_dim": 512,
     "latent_dim": 256
 }
@@ -74,7 +74,7 @@ def train(directory, target_shape=(256, 256, 3), save_image=False):
         output_signature=output_signature
     )
     autoencoder = VAE(target_shape, regularization_weight=1e-3, **vae_kwargs)
-    optimizer = Adam(learning_rate=1e-3)
+    optimizer = RMSprop(learning_rate=1e-3)
     early_stop = EarlyStopping(
         monitor='loss',
         min_delta=0.01,

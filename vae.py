@@ -84,7 +84,7 @@ class VAE(Model):
     def __init__(self, image_shape, conv_amt=5, dense_amt=5,
                  regularization_weight=1e-3, middle_dim=256, latent_dim=128):
         super().__init__()
-        self.latent_dim = 128
+        self.latent_dim = latent_dim
         self.image_shape = image_shape
         self.encoder = Encoder(
             conv_amt=conv_amt,
