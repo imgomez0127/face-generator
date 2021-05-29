@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow.math as tfm
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.data import Dataset
-from tensorflow.keras.optimizers import Adam, RMSprop
+from tensorflow.keras.optimizers import RMSprop
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from vae import VAE
 
