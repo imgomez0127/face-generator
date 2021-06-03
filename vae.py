@@ -7,7 +7,7 @@ from tensorflow.keras.activations import relu
 from tensorflow.keras.metrics import Mean
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, Flatten, Dense, Layer, Reshape
 from tensorflow.keras.layers import BatchNormalization as BatchNorm
-from tensorflow.keras.losses import BinaryCrossentropy
+from tensorflow.keras.losses import binary_crossentropy
 
 class Sampling(Layer):
 
@@ -22,7 +22,7 @@ class Sampling(Layer):
 
 def kl_loss(mu, sigma_log):
     difference = 1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log)
-    return -0.5 * tfm.reduce_mean(difference)
+    return -0.5 * tfm.reduce_mean(tfm.reduce_sum(difference, axis=1))
 
 def compute_conv_shape(image_shape, conv_amt, conv_size=None):
     if not conv_size:
@@ -80,29 +80,41 @@ class Decoder(Layer):
         return relu(self.output_layer(transpose_conv_output))
 
 class VAE(Model):
-
+    
     def __init__(self, image_shape, conv_amt=5, dense_amt=5,
                  regularization_weight=1e-3, middle_dim=256, latent_dim=128):
         super().__init__()
         self.latent_dim = latent_dim
         self.image_shape = image_shape
-        self.encoder = Encoder(
-            conv_amt=conv_amt,
-            dense_amt=dense_amt,
-            latent_dim=latent_dim,
-            middle_dim=middle_dim
-        )
-        self.decoder = Decoder(
-            image_shape,
-            conv_amt=conv_amt,
-            dense_amt=dense_amt,
-            middle_dim=middle_dim
-        )
+        self.encoder, self.decoder = self.create_layers(conv_amt, dense_amt, middle_dim)
         self.regularization_weight = regularization_weight
         self.loss_tracker = Mean(name='loss')
-        self.bce_loss = BinaryCrossentropy()
+        self.reconsturction_tracker = Mean(name='reconstruction_loss')
+        self.kl_tracker = Mean(name='kl_tracker')
         self.sampling = Sampling()
 
+    def create_layers(self, conv_amt, dense_amt, middle_dim):
+        enc_conv = dec_conv = conv_amt
+        enc_dense = dec_dense = dense_amt
+        if isinstance(conv_amt, tuple):
+            enc_conv, dec_conv = conv_amt
+        if isinstance(dense_amt, tuple):
+            enc_dense, dec_dense = dense_amt
+        encoder = Encoder(
+            conv_amt=enc_conv,
+            dense_amt=enc_dense,
+            latent_dim=self.latent_dim,
+            middle_dim=middle_dim
+        )
+        decoder = Decoder(
+            self.image_shape,
+            conv_amt=dec_conv,
+            dense_amt=dec_dense,
+            middle_dim=middle_dim
+        )
+        return encoder, decoder
+
+        
     def call(self, inputs):
         encoder_output = self.encoder(inputs)
         self.add_loss(kl_loss(*encoder_output))
@@ -121,13 +133,25 @@ class VAE(Model):
     def train_step(self, data):
         with tf.GradientTape() as tape:
             reconstruction = self(data, training=True)
-            loss = self.bce_loss(data, reconstruction)
-            loss += self.regularization_weight * sum(self.losses)
+            bce = tfm.reduce_mean(
+                tfm.reduce_sum(
+                    binary_crossentropy(data, reconstruction), 
+                    axis=(1, 2)
+                )
+            )
+            kl = sum(self.losses)
+            loss = bce + self.regularization_weight * kl
         gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
         self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
+        self.reconsturction_tracker.update_state(bce)
+        self.kl_tracker.update_state(kl)
+        return {
+            "loss": self.loss_tracker.result(), 
+            "reconstruction_loss": self.reconsturction_tracker.result(),
+            "kl_loss": self.kl_tracker.result()
+        }
 
     @property
     def metrics(self):
-        return [self.loss_tracker]
+        return [self.loss_tracker, self.reconsturction_tracker, self.kl_tracker]
