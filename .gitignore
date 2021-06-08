@@ -144,3 +144,6 @@ celebs.org
 *.jpeg
 /models
 *.zip
+# Tensorman ignores
+.bash_history
+.keras

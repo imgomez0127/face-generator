@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -15,8 +16,8 @@ from vae import VAE
 vae_kwargs = {
     "conv_amt": 10,
     "dense_amt": (5, 10),
-    "middle_dim": 1024,
-    "latent_dim": 512,
+    "middle_dim": 512,
+    "latent_dim": 256,
     "regularization_weight": 1
 }
 def parse_args():
@@ -47,7 +48,7 @@ def get_iter(generator, kwargs):
     def f():
         return generator.flow_from_directory(**kwargs)
     return f
-def train(directory, target_shape=(256, 256, 3), save_image=False):
+def train(directory, target_shape=(128, 128, 3), save_image=False):
     save_dir = "./modified-faces" if save_image else None
     image_gen = ImageDataGenerator(
         horizontal_flip=True,
@@ -63,7 +64,7 @@ def train(directory, target_shape=(256, 256, 3), save_image=False):
         "save_prefix": "test",
         "save_format": "jpeg",
         "subset": 'training',
-        "batch_size": 100
+        "batch_size": 32
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
     output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
@@ -82,7 +83,7 @@ def train(directory, target_shape=(256, 256, 3), save_image=False):
     autoencoder.compile(optimizer=optimizer, run_eagerly=True)
     history = autoencoder.fit(
         x=img_dataset,
-        steps_per_epoch=6,
+        steps_per_epoch=math.ceil(600/iter_kwargs["batch_size"]),
         epochs=100,
         callbacks=[early_stop]
     )
