@@ -15,7 +15,7 @@ from vae import VAE
 
 vae_kwargs = {
     "conv_amt": 10,
-    "dense_amt": (5, 10),
+    "dense_amt": 5,
     "middle_dim": 512,
     "latent_dim": 256,
     "regularization_weight": 1
