@@ -15,7 +15,7 @@ Sampled Image:
 On Reconstruction
 
 Refernce Image:
-![alt-text](https://i.imgur.com/qxxlsZ7.jpg)
+![alt-text](https://i.imgur.com/e3sptQi.jpg)
 
 Reconstruction Image:
-![alt-text]()
+![alt-text](https://i.imgur.com/PoUK7v0.png)
