@@ -10,12 +10,15 @@ since the face location is not uniform and the face direction is not uniform
 
 ## Examples
 Sampled Image:
+
 ![alt-text](https://i.imgur.com/HpZBpck.png)
 
 On Reconstruction
 
 Refernce Image:
+
 ![alt-text](https://i.imgur.com/e3sptQi.jpg)
 
 Reconstruction Image:
+
 ![alt-text](https://i.imgur.com/PoUK7v0.png)
