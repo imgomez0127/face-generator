@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow.math as tfm
 from tensorflow import keras
 from tensorflow.keras import Model
-from tensorflow.keras.activations import relu
+from tensorflow.keras.activations import relu, sigmoid
 from tensorflow.keras.metrics import Mean
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, Flatten, Dense, Layer, Reshape
 from tensorflow.keras.layers import BatchNormalization as BatchNorm
@@ -37,8 +37,8 @@ class Encoder(Layer):
 
     def __init__(self, conv_amt=5, dense_amt=5, middle_dim=256, latent_dim=128):
         super().__init__()
-        self.convs = [(Conv2D(3, 3, padding='same'), BatchNorm())
-                      for _ in range(conv_amt)]
+        self.convs = [(Conv2D(64/(i+1), 3, padding='same'), BatchNorm())
+                      for i in range(conv_amt)]
         self.dense_layers = [(Dense(middle_dim), BatchNorm())
                              for _ in range(dense_amt)]
         self.flatten = Flatten()
@@ -61,8 +61,8 @@ class Decoder(Layer):
     def __init__(self, image_shape, conv_amt=5, dense_amt=5, middle_dim=256):
         super().__init__()
         flatten_shape = int(tfm.reduce_prod(image_shape).numpy())
-        self.transpose_convs = [(Conv2DTranspose(3, 3, padding='same'), BatchNorm())
-                                for _ in range(conv_amt)]
+        self.transpose_convs = [(Conv2DTranspose(64/(i+1), 3, padding='same'), BatchNorm())
+                                for i in reversed(range(conv_amt))]
         self.output_layer = Conv2DTranspose(3, 3, padding='same')
         self.dense_layers = [(Dense(middle_dim), BatchNorm())
                              for _ in range(dense_amt)]
@@ -77,7 +77,7 @@ class Decoder(Layer):
         for transpose_conv, norm in reversed(self.transpose_convs):
             transpose_conv_output = norm(transpose_conv(transpose_conv_output))
             transpose_conv_output = relu(transpose_conv_output)
-        return relu(self.output_layer(transpose_conv_output))
+        return sigmoid(self.output_layer(transpose_conv_output))
 
 class VAE(Model):
     
@@ -89,7 +89,7 @@ class VAE(Model):
         self.encoder, self.decoder = self.create_layers(conv_amt, dense_amt, middle_dim)
         self.regularization_weight = regularization_weight
         self.loss_tracker = Mean(name='loss')
-        self.reconsturction_tracker = Mean(name='reconstruction_loss')
+        self.reconstruction_tracker = Mean(name='reconstruction_loss')
         self.kl_tracker = Mean(name='kl_tracker')
         self.sampling = Sampling()
 
@@ -144,14 +144,19 @@ class VAE(Model):
         gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
         self.loss_tracker.update_state(loss)
-        self.reconsturction_tracker.update_state(bce)
+        self.reconstruction_tracker.update_state(bce)
         self.kl_tracker.update_state(kl)
+        pixel_count = reconstruction.shape[1] * reconstruction.shape[2]
+        mean_reconstruction_loss = self.reconstruction_tracker.result()/pixel_count
+        mean_kl_loss = self.kl_tracker.result()/self.latent_dim
         return {
             "loss": self.loss_tracker.result(), 
-            "reconstruction_loss": self.reconsturction_tracker.result(),
-            "kl_loss": self.kl_tracker.result()
+            "reconstruction_loss": self.reconstruction_tracker.result(),
+            "kl_loss": self.kl_tracker.result(),
+            "mean_reconstruction_loss": mean_reconstruction_loss,
+            "mean_kl_loss": mean_kl_loss
         }
 
     @property
     def metrics(self):
-        return [self.loss_tracker, self.reconsturction_tracker, self.kl_tracker]
+        return [self.loss_tracker, self.reconstruction_tracker, self.kl_tracker]
