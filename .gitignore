@@ -142,7 +142,7 @@ cython_debug/
 key.txt
 celebs.org
 *.jpeg
-/models
+*.h5
 *.zip
 # Tensorman ignores
 .bash_history

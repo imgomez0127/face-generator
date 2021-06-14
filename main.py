@@ -11,7 +11,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.data import Dataset
 from tensorflow.keras.optimizers import RMSprop
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from vae import VAE
+from models.vae import VAE
 
 dataset_size = 600
 
