@@ -20,8 +20,7 @@ class Sampling(Layer):
         return mu + sigma
 
 
-def kl_loss(mu, sigma_log):
-    difference = 1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log)
+def kl_loss(mu, sigma_log): difference = 1 + sigma_log - tfm.square(mu) - tfm.exp(sigma_log)
     return -0.5 * tfm.reduce_mean(tfm.reduce_sum(difference, axis=1))
 
 def compute_conv_shape(image_shape, conv_amt, conv_size=None):
