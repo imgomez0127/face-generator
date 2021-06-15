@@ -7,11 +7,19 @@ from tensorflow.keras import metrics
 from tensorflow.keras import layers
 from tensorflow.keras import losses
 
+
 def product(*args):
     prod = 1
     for arg in args:
         prod *= arg
     return prod
+
+
+def get_discriminator_targets(targets):
+    targets = tf.random.uniform(targets.shape, minval=0.7) * targets
+    negative_labels = tf.random.uniform(targets.shape, maxval=0.3)
+    return tf.cat([targets, negative_labels])
+
 
 class Generator(layers.Layer):
 
@@ -72,9 +80,58 @@ class Discriminator(layers.Layer):
             data = dropout(data)
         return activations.sigmoid(self.output_layer(data))
 
+
 class GAN(keras.Model):
 
-    def __init__(self, discriminator_params, generator_params):
+    def __init__(self, latent_shape, output_shape, discriminator_params, generator_params):
+        self.latent_shape = latent_shape
+        self.output_shape = output_shape
         self.discriminator = Discriminator(*discriminator_params[0],
                                            **discriminator_params[1])
         self.generator = Generator(*generator_params[0], **generator_params[1])
+        self.bce = losses.BinaryCrossEntropy()
+
+
+    def call(self, inputs):
+        return self.generator(inputs)
+
+
+    def train_discriminator(self, inputs):
+        src, targets = inputs
+        predictions = self.discriminator(src)
+        return losses.bce(predictions, targets)
+
+
+
+    def train_generator(self, inputs):
+        src, targets = inputs
+        predictions = self.discriminator(self(src))
+        return losses.bce(predictions, targets)
+
+
+    def train_step(self, inputs):
+        src, targets = inputs
+        sampled_vector = tf.random.normal((src.shape[0], *self.latent_shape))
+        fake_images = self(sampled_vector)
+        src = tf.concat([src, fake_images], 0)
+        targets = get_discriminator_targets(targets)
+        self.generator.trainable = False
+        self.discriminator.trainable = True
+        with tf.GradientTape() as disc_tape:
+            disc_loss = self.train_discriminator((src, targets))
+        disc_gradients = disc_tape.gradient(disc_loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(disc_gradients, self.trainable_weights))
+        self.disc_loss_tracker.update_state(disc_loss)
+        self.discriminator.trainable = False
+        self.generator.trainable = True
+        sampled_vectors = tf.random.normal((src.shape[0], *self.latent_shape))
+        gen_targets = tf.ones(sampled_vector.shape)
+        with tf.GradientTape() as gen_tape:
+            gen_loss = self.train_generator((sampled_vectors, gen_targets))
+        gen_gradients = gen_tape.gradient(gen_loss, self.trainable_weights)
+        self.optimizer.apply_gradient(zip(gen_gradients, self.trainable_weights))
+        self.gen_loss_tracker.update_state(gen_loss)
+        return {
+            "disc_loss": self.disc_loss_tracker.results(),
+            "gen_loss": self.gen_loss_tracker.results()
+        }
