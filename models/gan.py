@@ -71,3 +71,10 @@ class Discriminator(layers.Layer):
             data = self.leaky_relu(dense(data))
             data = dropout(data)
         return activations.sigmoid(self.output_layer(data))
+
+class GAN(keras.Model):
+
+    def __init__(self, discriminator_params, generator_params):
+        self.discriminator = Discriminator(*discriminator_params[0],
+                                           **discriminator_params[1])
+        self.generator = Generator(*generator_params[0], **generator_params[1])
