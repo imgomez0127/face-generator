@@ -2,6 +2,8 @@
 
 import argparse
 import math
+from os import path
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -109,10 +111,28 @@ def reconstruct_image(img, target_shape=(64, 64, 3)):
     autoencoder.load_weights("models/vae_model.h5")
     return autoencoder(tf.reshape(img, [1, *img.shape]))
 
+def get_largest_filenumber(files):
+    largest_num = 1
+    nums_regex = re.compile("[0-9]+")
+    for f in files:
+        match = nums_regex.match(f)
+        if match:
+                largest_num = max(int(match.group()), largest_num)
+    return largest_num
+
+
+def plot_losses(*args, file_dir="/gan-losses"):
+    for arg in args:
+        plt.plot(range(len(arg)), arg)
+    files = path.listdir(file_dir)
+    plt.savefig(f'loss_curves/loss_curve{get_largest_file_number(files)}.png')
+
+
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
         autoencoder, history = train(args.train, save_image=args.save_image)
+        plot_losses(history["gen_loss"], history["disc_loss"])
     elif args.test:
         image = np.asarray(Image.open(args.test)).astype(np.float32)
         reconstruction = reconstruct_image(image/255)
