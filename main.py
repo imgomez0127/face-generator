@@ -54,7 +54,8 @@ def get_iter(generator, kwargs):
         return generator.flow_from_directory(**kwargs)
     return f
 
-def train(directory, target_shape=(64, 64, 3), save_image=False):
+
+def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10, class_mode=None):
     save_dir = "./modified-faces" if save_image else None
     image_gen = ImageDataGenerator(
         horizontal_flip=True,
@@ -70,13 +71,47 @@ def train(directory, target_shape=(64, 64, 3), save_image=False):
         "save_prefix": "test",
         "save_format": "jpeg",
         "subset": 'training',
-        "batch_size": 10
+        "batch_size": batch_size
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
     output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
     img_dataset = Dataset.from_generator(
         img_iter_gen,
         output_signature=output_signature
+    )
+
+def train_gan(directory, target_shape=(64, 64, 3) save_image=False, batch_size=10):
+    img_dataset = load_data(
+        directory,
+        target_shape=target_shape,
+        save_image=save_image
+        batch_size=batch_size
+        class_mode="binary"
+    )
+    gan = GAN(*gan_params)
+    optimizer = RMSprop(learning_rate=1e-3)
+    early_stop = EarlyStopping(
+        monitor='gen_loss',
+        min_delta=0.001,
+        patience=10,
+        restore_best_weights=True
+    )
+    gan.compile(optimizer=optimiezr, run_eagerly=True)
+    history = gan.fit(
+        x=img_dataset,
+        steps_per_epoch=math.ceil(dataset_size/batch_size)
+        epochs=100,
+        callbacks=[early_stop]
+    )
+    gan.save_weights("models/gan_model.h5")
+    return gan, history
+
+def train_autoencoder(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
+    img_dataset = load_data(
+        directory,
+        target_shape=target_shape,
+        save_image=save_image,
+        batch_size=batch_size
     )
     autoencoder = VAE(target_shape, **vae_kwargs)
     optimizer = RMSprop(learning_rate=1e-3)
