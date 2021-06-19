@@ -147,3 +147,5 @@ celebs.org
 # Tensorman ignores
 .bash_history
 .keras
+./generated-images
+./loss-curves

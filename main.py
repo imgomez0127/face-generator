@@ -84,7 +84,6 @@ def parse_args():
     parser.add_argument(
         "--image-count",
         type=int,
-        const=True,
         default=1,
         help="Amount of images to generate"
     )
@@ -164,7 +163,7 @@ def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     history = gan.fit(
         x=img_dataset,
         steps_per_epoch=math.ceil(dataset_size/batch_size),
-        epochs=1000
+        epochs=300
     )
     gan.save_weights("models/gan_model.h5")
     return gan, history.history
@@ -207,7 +206,7 @@ def plot_losses(*args, file_dir="loss-curves"):
     for arg in args:
         plt.plot(range(len(arg)), arg)
     files = os.listdir(file_dir)
-    plt.savefig(f'./{file_dir}/loss_curve{get_largest_filenumber(files)}.png')
+    plt.savefig(f'./{file_dir}/loss_curve{get_largest_filenumber(files)+1}.png')
 
 
 if __name__ == "__main__":

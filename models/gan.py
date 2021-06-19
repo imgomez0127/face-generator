@@ -18,8 +18,8 @@ def _product(*args):
 
 def _get_discriminator_targets(targets, smoothing=True):
     if smoothing:
-        targets = tf.random.uniform(targets.shape, minval=0.7) * targets
-        negative_labels = tf.random.uniform(targets.shape, maxval=0.3)
+        targets = tf.random.uniform(targets.shape, minval=0.9) * targets
+        negative_labels = tf.random.uniform(targets.shape, maxval=0.1)
     else:
         negative_labels = tf.zeros(targets.shape)
     return tf.concat([targets, negative_labels], 0)
