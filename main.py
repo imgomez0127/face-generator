@@ -14,6 +14,7 @@ from tensorflow.data import Dataset
 from tensorflow.keras.optimizers import RMSprop
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from models.vae import VAE
+from models.gan import GAN
 
 dataset_size = 600
 
@@ -24,6 +25,42 @@ vae_kwargs = {
     "latent_dim": 128,
     "regularization_weight": 1
 }
+
+gan_params = [
+    300, # latent_len
+    (64, 64, 3), # Output Shape
+    # Discriminator Args
+    [
+        [],
+        {
+            "conv_params":[
+                ([16, 3], {"padding": "same"}),
+                ([8, 3], {"padding": "same"}),
+                ([4, 3], {"padding": "same"}),
+                ([3, 3], {"padding": "same"}),
+            ],
+            "dense_params":
+            [
+                ([1000], {}),
+                ([500], {}),
+                ([100], {}),
+                ([1], {})
+            ]
+        }
+    ],
+    # Generator Params
+    [
+        [32],
+        {
+            "conv_params": [
+                ([16, 3], {"padding": "same"}),
+                ([8, 3], {"padding": "same"}),
+                ([4, 3], {"padding": "same"}),
+                ([3, 3], {"padding": "same"}),
+            ]
+        }
+    ],
+]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="File for running VAE")
@@ -49,6 +86,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 def get_iter(generator, kwargs):
     def f():
         return generator.flow_from_directory(**kwargs)
@@ -65,7 +103,7 @@ def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     iter_kwargs = {
         "directory": directory,
         "target_size": target_shape[:2],
-        "class_mode": None,
+        "class_mode": class_mode,
         "seed": 218,
         "save_to_dir": save_dir,
         "save_prefix": "test",
@@ -74,39 +112,15 @@ def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
         "batch_size": batch_size
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
-    output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float64))
+    output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float32))
     img_dataset = Dataset.from_generator(
         img_iter_gen,
         output_signature=output_signature
     )
+    return img_dataset
 
-def train_gan(directory, target_shape=(64, 64, 3) save_image=False, batch_size=10):
-    img_dataset = load_data(
-        directory,
-        target_shape=target_shape,
-        save_image=save_image
-        batch_size=batch_size
-        class_mode="binary"
-    )
-    gan = GAN(*gan_params)
-    optimizer = RMSprop(learning_rate=1e-3)
-    early_stop = EarlyStopping(
-        monitor='gen_loss',
-        min_delta=0.001,
-        patience=10,
-        restore_best_weights=True
-    )
-    gan.compile(optimizer=optimiezr, run_eagerly=True)
-    history = gan.fit(
-        x=img_dataset,
-        steps_per_epoch=math.ceil(dataset_size/batch_size)
-        epochs=100,
-        callbacks=[early_stop]
-    )
-    gan.save_weights("models/gan_model.h5")
-    return gan, history
 
-def train_autoencoder(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
+def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
     img_dataset = load_data(
         directory,
         target_shape=target_shape,
@@ -124,13 +138,40 @@ def train_autoencoder(directory, target_shape=(64, 64, 3), save_image=False, bat
     autoencoder.compile(optimizer=optimizer, run_eagerly=True)
     history = autoencoder.fit(
         x=img_dataset,
-        steps_per_epoch=math.ceil(dataset_size/iter_kwargs["batch_size"]),
+        steps_per_epoch=math.ceil(dataset_size/batch_size),
         epochs=100,
         callbacks=[early_stop]
     )
     autoencoder.compile(optimizer=optimizer)
     autoencoder.save_weights("models/vae_model.h5")
     return autoencoder, history
+
+
+def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
+    img_dataset = load_data(
+        directory,
+        target_shape=target_shape,
+        save_image=save_image,
+        batch_size=batch_size,
+    )
+    gan = GAN(*gan_params)
+    optimizer = RMSprop(learning_rate=1e-3)
+    early_stop = EarlyStopping(
+        monitor='gen_loss',
+        min_delta=0.001,
+        patience=10,
+        restore_best_weights=True
+    )
+    gan.compile(optimizer=optimizer, run_eagerly=True)
+    history = gan.fit(
+        x=img_dataset,
+        steps_per_epoch=math.ceil(dataset_size/batch_size),
+        epochs=100,
+        callbacks=[early_stop]
+    )
+    gan.save_weights("models/gan_model.h5")
+    return gan, history
+
 
 def generate_image(target_shape=(64, 64, 3), save_image=False):
     autoencoder = VAE(target_shape, **vae_kwargs)
@@ -139,12 +180,14 @@ def generate_image(target_shape=(64, 64, 3), save_image=False):
     autoencoder.load_weights("models/vae_model.h5")
     return autoencoder.generate_image()
 
+
 def reconstruct_image(img, target_shape=(64, 64, 3)):
     autoencoder = VAE(target_shape, **vae_kwargs)
     autoencoder(tf.random.uniform([1, *target_shape]))
     autoencoder.compile(run_eagerly=True)
     autoencoder.load_weights("models/vae_model.h5")
     return autoencoder(tf.reshape(img, [1, *img.shape]))
+
 
 def get_largest_filenumber(files):
     largest_num = 1
@@ -166,7 +209,7 @@ def plot_losses(*args, file_dir="/gan-losses"):
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
-        autoencoder, history = train(args.train, save_image=args.save_image)
+        autoencoder, history = train_gan(args.train, save_image=args.save_image)
         plot_losses(history["gen_loss"], history["disc_loss"])
     elif args.test:
         image = np.asarray(Image.open(args.test)).astype(np.float32)
