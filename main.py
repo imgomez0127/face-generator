@@ -11,7 +11,7 @@ import tensorflow as tf
 import tensorflow.math as tfm
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.data import Dataset
-from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.optimizers import RMSprop, Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from models.vae import VAE
 from models.gan import GAN
@@ -27,29 +27,29 @@ vae_kwargs = {
 }
 
 gan_params = [
-    300, # latent_len
+    8000, # latent_len
     (64, 64, 3), # Output Shape
     # Discriminator Args
     [
         [],
         {
             "conv_params":[
-                ([8, 3], {"padding": "same"}),
-                ([4, 3], {"padding": "same"}),
-                ([3, 3], {"padding": "same"})
+                ([8, 3], {"padding": "same", "strides": 2}),
+                ([4, 3], {"padding": "same", "strides": 2}),
+                ([3, 3], {"padding": "same", "strides": 2})
             ],
             "dense_params":
             [
-                ([500], {}),
                 ([1], {})
             ]
         }
     ],
     # Generator Params
     [
-        [32],
+        [256],
         {
             "conv_params": [
+                ([128, 3], {"padding": "same"}),
                 ([64, 3], {"padding": "same"}),
                 ([32, 3], {"padding": "same"}),
                 ([16, 3], {"padding": "same"}),
@@ -80,6 +80,13 @@ def parse_args():
         type=str,
         default="",
         help="Test image to check how the model compresses than decompresses"
+    )
+    parser.add_argument(
+        "--image-count",
+        type=int,
+        const=True,
+        default=1,
+        help="Amount of images to generate"
     )
     return parser.parse_args()
 
@@ -144,7 +151,7 @@ def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     return autoencoder, history
 
 
-def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
+def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=30):
     img_dataset = load_data(
         directory,
         target_shape=target_shape,
@@ -152,19 +159,12 @@ def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
         batch_size=batch_size,
     )
     gan = GAN(*gan_params)
-    optimizer = RMSprop(learning_rate=1e-3)
-    early_stop = EarlyStopping(
-        monitor='gen_loss',
-        min_delta=0.001,
-        patience=1000,
-        restore_best_weights=True
-    )
+    optimizer = Adam(learning_rate=1e-2)
     gan.compile(optimizer=optimizer, run_eagerly=True)
     history = gan.fit(
         x=img_dataset,
         steps_per_epoch=math.ceil(dataset_size/batch_size),
-        epochs=1000,
-        callbacks=[early_stop]
+        epochs=1000
     )
     gan.save_weights("models/gan_model.h5")
     return gan, history.history
@@ -207,13 +207,13 @@ def plot_losses(*args, file_dir="loss-curves"):
     for arg in args:
         plt.plot(range(len(arg)), arg)
     files = os.listdir(file_dir)
-    plt.savefig(f'./{file_dir}/loss_curve{get_largest_file_number(files)}.png')
+    plt.savefig(f'./{file_dir}/loss_curve{get_largest_filenumber(files)}.png')
 
 
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
-        autoencoder, history = train_gan(args.train, save_image=args.save_image)
+        autoencoder, history = train_gan(args.train, save_image=args.save_image, batch_size=100)
         plot_losses(history["gen_loss"], history["disc_loss"])
     elif args.test:
         image = np.asarray(Image.open(args.test)).astype(np.float32)
@@ -221,6 +221,7 @@ if __name__ == "__main__":
         plt.imshow(reconstruction[0])
         plt.savefig("reconstruction.png")
     else:
-        image = generate_image_gan().numpy()
-        plt.imshow(image[0])
-        plt.savefig("test.png")
+        for i in range(args.image_count):
+            image = generate_image_gan().numpy()
+            plt.imshow(image[0])
+            plt.savefig(f"./generated-images/test{i}.png")
