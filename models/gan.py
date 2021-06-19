@@ -15,9 +15,12 @@ def _product(*args):
     return prod
 
 
-def _get_discriminator_targets(targets):
-    targets = tf.random.uniform(targets.shape, minval=0.7) * targets
-    negative_labels = tf.random.uniform(targets.shape, maxval=0.3)
+def _get_discriminator_targets(targets, smoothing=True):
+    if smoothing:
+        targets = tf.random.uniform(targets.shape, minval=0.7) * targets
+        negative_labels = tf.random.uniform(targets.shape, maxval=0.3)
+    else:
+        negative_labels = tf.zeros(targets.shape)
     return tf.concat([targets, negative_labels], 0)
 
 
@@ -105,15 +108,15 @@ class GAN(keras.Model):
     def train_discriminator(self, inputs):
         _, targets = inputs
         predictions = self.discriminator(inputs)
-        return self.bce(predictions, targets)
+        return self.bce(targets, predictions)
 
     def train_generator(self, inputs):
         _, targets = inputs
         predictions = self.discriminator((self(inputs), targets))
-        return self.bce(predictions, targets)
+        return self.bce(targets, predictions)
 
     def train_step(self, inputs):
-        src, targets = inputs, tf.ones(inputs.shape[0])
+        src, targets = inputs, tf.ones((inputs.shape[0], 1))
         sampled_vector = tf.random.normal((src.shape[0], self.latent_len))
         fake_images = self((sampled_vector, None))
         training_imgs = tf.concat([src, fake_images], 0)
@@ -128,7 +131,7 @@ class GAN(keras.Model):
         self.discriminator.trainable = False
         self.generator.trainable = True
         sampled_vectors = tf.random.normal((src.shape[0], self.latent_len))
-        gen_targets = tf.ones(sampled_vector.shape)
+        gen_targets = tf.ones((src.shape[0], 1))
         with tf.GradientTape() as gen_tape:
             gen_loss = self.train_generator((sampled_vectors, gen_targets))
         gen_gradients = gen_tape.gradient(gen_loss, self.trainable_weights)

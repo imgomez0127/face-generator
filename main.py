@@ -2,7 +2,7 @@
 
 import argparse
 import math
-from os import path
+import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,16 +34,13 @@ gan_params = [
         [],
         {
             "conv_params":[
-                ([16, 3], {"padding": "same"}),
                 ([8, 3], {"padding": "same"}),
                 ([4, 3], {"padding": "same"}),
-                ([3, 3], {"padding": "same"}),
+                ([3, 3], {"padding": "same"})
             ],
             "dense_params":
             [
-                ([1000], {}),
                 ([500], {}),
-                ([100], {}),
                 ([1], {})
             ]
         }
@@ -53,9 +50,9 @@ gan_params = [
         [32],
         {
             "conv_params": [
+                ([64, 3], {"padding": "same"}),
+                ([32, 3], {"padding": "same"}),
                 ([16, 3], {"padding": "same"}),
-                ([8, 3], {"padding": "same"}),
-                ([4, 3], {"padding": "same"}),
                 ([3, 3], {"padding": "same"}),
             ]
         }
@@ -159,18 +156,18 @@ def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     early_stop = EarlyStopping(
         monitor='gen_loss',
         min_delta=0.001,
-        patience=10,
+        patience=1000,
         restore_best_weights=True
     )
     gan.compile(optimizer=optimizer, run_eagerly=True)
     history = gan.fit(
         x=img_dataset,
         steps_per_epoch=math.ceil(dataset_size/batch_size),
-        epochs=100,
+        epochs=1000,
         callbacks=[early_stop]
     )
     gan.save_weights("models/gan_model.h5")
-    return gan, history
+    return gan, history.history
 
 
 def generate_image(target_shape=(64, 64, 3), save_image=False):
@@ -179,6 +176,13 @@ def generate_image(target_shape=(64, 64, 3), save_image=False):
     autoencoder.compile(run_eagerly=True)
     autoencoder.load_weights("models/vae_model.h5")
     return autoencoder.generate_image()
+
+def generate_image_gan(target_shape=(64, 64, 3)):
+    gan = GAN(*gan_params)
+    gan.discriminator((gan((tf.random.uniform((1, gan.latent_len)), None)), None))
+    gan.compile(run_eagerly=True)
+    gan.load_weights("models/gan_model.h5")
+    return gan((tf.random.uniform((1, gan.latent_len)), None))
 
 
 def reconstruct_image(img, target_shape=(64, 64, 3)):
@@ -199,11 +203,11 @@ def get_largest_filenumber(files):
     return largest_num
 
 
-def plot_losses(*args, file_dir="/gan-losses"):
+def plot_losses(*args, file_dir="loss-curves"):
     for arg in args:
         plt.plot(range(len(arg)), arg)
-    files = path.listdir(file_dir)
-    plt.savefig(f'loss_curves/loss_curve{get_largest_file_number(files)}.png')
+    files = os.listdir(file_dir)
+    plt.savefig(f'./{file_dir}/loss_curve{get_largest_file_number(files)}.png')
 
 
 if __name__ == "__main__":
@@ -217,6 +221,6 @@ if __name__ == "__main__":
         plt.imshow(reconstruction[0])
         plt.savefig("reconstruction.png")
     else:
-        image = generate_image().numpy()
+        image = generate_image_gan().numpy()
         plt.imshow(image[0])
         plt.savefig("test.png")
