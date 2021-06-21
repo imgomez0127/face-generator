@@ -27,7 +27,6 @@ vae_kwargs = {
 }
 
 gan_params = [
-    8000, # latent_len
     (64, 64, 3), # Output Shape
     # Discriminator Args
     [
@@ -46,14 +45,22 @@ gan_params = [
     ],
     # Generator Params
     [
-        [256],
+        [(8, 8, 256)],
         {
             "conv_params": [
+                ([256, 3], {"padding": "same"}),
+                ([256, 3], {"padding": "same"}),
+                ([128, 3], {"padding": "same"}),
                 ([128, 3], {"padding": "same"}),
                 ([64, 3], {"padding": "same"}),
+                ([64, 3], {"padding": "same"}),
+                ([32, 3], {"padding": "same"}),
                 ([32, 3], {"padding": "same"}),
                 ([16, 3], {"padding": "same"}),
-                ([3, 3], {"padding": "same"}),
+                ([16, 3], {"padding": "same"}),
+                ([8, 2], {"padding": "valid", "strides": 2}),
+                ([4, 2], {"padding": "valid", "strides": 2}),
+                ([3, 2], {"padding": "valid", "strides": 2}),
             ]
         }
     ],
@@ -150,7 +157,7 @@ def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     return autoencoder, history
 
 
-def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=30):
+def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=100):
     img_dataset = load_data(
         directory,
         target_shape=target_shape,
@@ -158,12 +165,12 @@ def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
         batch_size=batch_size,
     )
     gan = GAN(*gan_params)
-    optimizer = Adam(learning_rate=1e-2)
+    optimizer = Adam(learning_rate=2e-4, beta_1=0.5)
     gan.compile(optimizer=optimizer, run_eagerly=True)
     history = gan.fit(
         x=img_dataset,
         steps_per_epoch=math.ceil(dataset_size/batch_size),
-        epochs=300
+        epochs=150
     )
     gan.save_weights("models/gan_model.h5")
     return gan, history.history
@@ -178,10 +185,10 @@ def generate_image(target_shape=(64, 64, 3), save_image=False):
 
 def generate_image_gan(target_shape=(64, 64, 3)):
     gan = GAN(*gan_params)
-    gan.discriminator((gan((tf.random.uniform((1, gan.latent_len)), None)), None))
+    gan.discriminator((gan((tf.random.uniform((1, gan.latent_len), minval=-1, maxval=1), None)), None))
     gan.compile(run_eagerly=True)
     gan.load_weights("models/gan_model.h5")
-    return gan((tf.random.uniform((1, gan.latent_len)), None))
+    return gan((tf.random.uniform((1, gan.latent_len), minval=-1, maxval=1), None))
 
 
 def reconstruct_image(img, target_shape=(64, 64, 3)):
@@ -193,7 +200,7 @@ def reconstruct_image(img, target_shape=(64, 64, 3)):
 
 
 def get_largest_filenumber(files):
-    largest_num = 1
+    largest_num = 0
     nums_regex = re.compile("[0-9]+")
     for f in files:
         match = nums_regex.match(f)
@@ -212,7 +219,7 @@ def plot_losses(*args, file_dir="loss-curves"):
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
-        autoencoder, history = train_gan(args.train, save_image=args.save_image, batch_size=100)
+        gan, history = train_gan(args.train, save_image=args.save_image, batch_size=100)
         plot_losses(history["gen_loss"], history["disc_loss"])
     elif args.test:
         image = np.asarray(Image.open(args.test)).astype(np.float32)

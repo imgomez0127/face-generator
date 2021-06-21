@@ -30,35 +30,24 @@ def _perturb_images(src, stddev=0.5):
 
 class Generator(layers.Layer):
 
-    def __init__(self, output_dim, depth, conv_params=None):
+    def __init__(self, latent_shape, conv_params=None):
         super().__init__()
         if not conv_params:
             raise ValueError("Did not add any input conv_params")
-        self.batch_norms = [layers.BatchNormalization(momentum=0.9)
-                            for _ in range(len(conv_params))]
-        self.upsampling_layers = [layers.UpSampling2D()
-                                  for _ in range(min(len(conv_params)-1, 3))]
+        self.batch_norms = [layers.BatchNormalization()
+                            for _ in range(len(conv_params)-1)]
         self.conv_layers = [layers.Conv2DTranspose(*conv_args, **conv_kwargs)
                             for conv_args, conv_kwargs in conv_params[:-1]]
-        self.latent_dim = (output_dim[0]//2**len(self.upsampling_layers),
-                           output_dim[1]//2**len(self.upsampling_layers),
-                           output_dim[2])
-        self.sample = layers.Dense(_product(*self.latent_dim))
-        self.reshape_layer = layers.Reshape(self.latent_dim)
+        self.latent_shape = latent_shape
+        self.reshape_layer = layers.Reshape(_product(self.latent_shape))
         self.output_layer = layers.Conv2DTranspose(*conv_params[-1][0],
                                                    **conv_params[-1][1])
+
     def call(self, inputs):
         # Get input data from the dataset
-        data, _ = inputs
-        samples = activations.relu(self.batch_norms[0](self.sample(data)))
+        samples, _ = inputs
         samples = self.reshape_layer(samples)
-        for upsample, conv, norm in zip(self.upsampling_layers,
-                                        self.conv_layers, self.batch_norms[1:]):
-            samples = upsample(samples)
-            samples = activations.relu(norm(conv(samples)))
-        conv_layers = self.conv_layers[len(self.upsampling_layers):]
-        norm_layers = self.batch_norms[1+len(self.upsampling_layers):]
-        for conv, norm in zip(conv_layers, norm_layers):
+        for conv, norm in zip(self.conv_layers, self.batch_norms):
             samples = activations.relu(norm(conv(samples)))
         return activations.sigmoid(self.output_layer(samples))
 
@@ -72,7 +61,6 @@ class Discriminator(layers.Layer):
         dropout_amt = len(conv_params)+len(dense_params)-1
         self.dropout_layers = [layers.Dropout(0.5)
                                for _ in range(dropout_amt)]
-        self.norms = [layers.BatchNormalization() for _ in range(dropout_amt)]
         self.conv_layers = [layers.Conv2D(*conv_args, **conv_kwargs)
                             for conv_args, conv_kwargs in conv_params]
         self.dense_layers = [layers.Dense(*dense_args, **dense_kwargs)
@@ -85,35 +73,30 @@ class Discriminator(layers.Layer):
     def call(self, inputs):
         data, _ = inputs
         conv_dropouts = self.dropout_layers[:len(self.conv_layers)]
-        conv_norms = self.norms[:len(self.conv_layers)]
         dense_dropouts = self.dropout_layers[len(self.conv_layers):]
-        dense_norms = self.norms[len(self.conv_layers):]
-        for conv, dropout, norm in zip(self.conv_layers, conv_dropouts,
-                                       conv_norms):
-            data = self.leaky_relu(norm(conv(data)))
+        for conv, dropout in zip(self.conv_layers, conv_dropouts):
+            data = self.leaky_relu(conv(data))
             data = dropout(data)
         data = self.flatten(data)
-        for dense, dropout, norm in zip(self.dense_layers, dense_dropouts,
-                                        dense_norms):
-            data = self.leaky_relu(norm(dense(data)))
+        for dense, dropout, norm in zip(self.dense_layers, dense_dropouts):
+            data = self.leaky_relu(dense(data))
             data = dropout(data)
         return activations.sigmoid(self.output_layer(data))
 
 
 class GAN(keras.Model):
 
-    def __init__(self, latent_len, output_dim, discriminator_params, generator_params):
+    def __init__(self, output_dim, discriminator_params, generator_params):
         super().__init__()
-        self.latent_len = latent_len
         self.output_dim = output_dim
         self.discriminator = Discriminator(*discriminator_params[0],
                                            **discriminator_params[1])
-        self.generator = Generator(output_dim, *generator_params[0],
-                                   **generator_params[1])
+        self.generator = Generator(*generator_params[0], **generator_params[1])
         self.bce = losses.BinaryCrossentropy()
         self.disc_loss_tracker = metrics.Mean(name="disc_loss")
         self.gen_loss_tracker = metrics.Mean(name="gen_loss")
-        self.disc_optimizer = optimizers.Adam(learning_rate=1e-5)
+        self.disc_optimizer = optimizers.Adam(learning_rate=5e-5, beta_1=0.5)
+        self.latent_len = _product(*self.generator.latent_shape)
 
 
     def call(self, inputs):
@@ -131,10 +114,10 @@ class GAN(keras.Model):
 
     def train_step(self, inputs):
         src, targets = inputs, tf.ones((inputs.shape[0], 1))
-        sampled_vector = tf.random.normal((src.shape[0], self.latent_len))
+        sampled_vector = tf.random.uniform((src.shape[0], self.latent_len), minval=-1, maxval=1)
         fake_images = self((sampled_vector, None))
         training_imgs = tf.concat([src, fake_images], 0)
-        training_imgs = _perturb_images(training_imgs, stddev=30./255)
+        training_imgs = _perturb_images(training_imgs, stddev=10/255)
         targets = _get_discriminator_targets(targets)
         self.generator.trainable = False
         self.discriminator.trainable = True
@@ -145,7 +128,7 @@ class GAN(keras.Model):
         self.disc_loss_tracker.update_state(disc_loss)
         self.discriminator.trainable = False
         self.generator.trainable = True
-        sampled_vectors = tf.random.normal((src.shape[0], self.latent_len))
+        sampled_vectors = tf.random.uniform((src.shape[0], self.latent_len), minval=-1, maxval=1)
         gen_targets = tf.ones((src.shape[0], 1))
         with tf.GradientTape() as gen_tape:
             gen_loss = self.train_generator((sampled_vectors, gen_targets))
