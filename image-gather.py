@@ -2,40 +2,64 @@
 import random
 import string
 import argparse
+import traceback
 import requests
 import matplotlib.pyplot as plt
+import PIL
 from PIL import Image
 from io import BytesIO
 
-def load_key(file_name):
+def _load_key(file_name):
     with open(file_name, "r") as f:
         key = f.readline().strip()
     return key
 
-def load_args():
+def _load_args():
     parser = argparse.ArgumentParser(description="Download images of a kpop stars")
     parser.add_argument("number", type=int, help="Amount of images to download")
     parser.add_argument("name", type=str, help="Kpop celeb to search images for")
     return parser.parse_args()
 
 if __name__ == "__main__":
-    args = load_args()
+    args = _load_args()
     name = args.name
     number = args.number
-    search_url = "https://api.bing.microsoft.com/v7.0/images/search"
-    subscription_key = load_key("key.txt")
-    headers = {"Ocp-Apim-Subscription-Key": subscription_key}
-    params = {"q": name, "license": "public", "imageType": "photo"}
-    response = requests.get(search_url, headers=headers, params=params)
-    response.raise_for_status()
-    search_results = response.json()
-    thumbnail_urls = [img['thumbnail']["thumbnailUrl"] for img in search_results["queryExpansions"][:number]]
-    file_length = 10
+    api_key = _load_key("key.txt")
+    engine_id = "bdad4e6da3462d720"
+    search_url = f"https://www.googleapis.com/customsearch/v1/siterestrict?key={api_key}&cx={engine_id}"
+    params = {
+        "cx": engine_id,
+        "imgType": "photo",
+        "key": api_key,
+        "searchType": "image",
+        "q": name,
+        "start":1
+    }
+    thumbnail_urls = []
+    while len(thumbnail_urls) < number:
+        print(f"Query index {params['start']}", end='\r')
+        try:
+            response_package = requests.get(search_url, params=params)
+            response_package.raise_for_status()
+            response = response_package.json()
+        except requests.exceptions.HTTPError as e:
+            traceback.print_exc()
+            print(f"Unable to query index {params['start']}")
+            print("Saving currently queried images")
+            break
+        urls = [content["link"] for content in response["items"]]
+        thumbnail_urls.extend(urls)
+        params["start"] = response["queries"]["nextPage"][0]["startIndex"]
+    file_length = 30
     letters = string.ascii_letters
+    print(thumbnail_urls)
     for url in thumbnail_urls:
-            image_data = requests.get(url)
-            image_data.raise_for_status()
-            image = Image.open(BytesIO(image_data.content))
-            random_name = (''.join(random.choice(letters) for i in range(file_length)))
-            image.save(f'./training_images/{random_name}.jpg', "JPEG")
+        try:
+            image_bytes = requests.get(url)
+            image_buf = BytesIO(image_bytes.content)
+            image = Image.open(image_buf)
+            random_name = ''.join((random.choice(letters) for i in range(file_length)))
+            image.save(f'./training_images/{random_name}.png')
+        except PIL.UnidentifiedImageError:
+            print(f"WARNING: Skipping url {url}")
     print(f'Saved {len(thumbnail_urls)} images')
