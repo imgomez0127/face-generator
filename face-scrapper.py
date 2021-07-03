@@ -35,8 +35,8 @@ if __name__ == "__main__":
         faces = [get_faces(image) for image in images]
         for file_name, faces in zip(path.iterdir(), faces):
             for i, face in enumerate(faces):
-                cv2.imwrite(f"./faces/{file_name.name[:-4]}-{i}.jpg", face)
+                cv2.imwrite(f"./faces/images/{file_name.name[:-4]}-{i}.jpg", face)
     else:
         faces = get_faces(images)
         for i, face in enumerate(faces):
-            cv2.imwrite(f"./faces/{path.name[:-4]}-{i}.jpg", face)
+            cv2.imwrite(f"./faces/images/{path.name[:-4]}-{i}.jpg", face)
