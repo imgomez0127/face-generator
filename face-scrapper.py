@@ -18,8 +18,10 @@ def load_args():
 
 def get_images(path):
     if path.is_dir():
-        return [cv2.imread(str(file_path)) for file_path in path.iterdir()]
-    return cv2.imread(str(path))
+        for file_path in path.iterdir():
+            yield cv2.imread(str(file_path))
+    else:
+        yield cv2.imread(str(path))
 
 def get_faces(image):
     rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -31,7 +33,7 @@ def get_faces(image):
 if __name__ == "__main__":
     path = Path(load_args().path)
     images = get_images(path)
-    if isinstance(images, list):
+    if path.is_dir():
         faces = [get_faces(image) for image in images]
         for file_name, faces in zip(path.iterdir(), faces):
             for i, face in enumerate(faces):
