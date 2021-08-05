@@ -10,7 +10,6 @@ Test gan on new dataset that has more images.
 Sampled Images:
 
 ![alt-text](https://i.imgur.com/HpZBpck.png)
-![alt-text](https://i.imgur.com/7WhwMTJ.png)
 On Reconstruction
 
 Refernce Image:
@@ -24,3 +23,4 @@ Reconstruction Image:
 
 ## After collecting more data
 ![alt-text](https://i.imgur.com/yPUUx8f.png)
+![alt-text](https://i.imgur.com/7WhwMTJ.png)
