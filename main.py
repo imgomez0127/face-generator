@@ -16,7 +16,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from models.vae import VAE
 from models.gan import GAN
 
-dataset_size = 600
+dataset_size = 8007
 
 vae_kwargs = {
     "conv_amt": 3,
@@ -27,12 +27,12 @@ vae_kwargs = {
 }
 
 gan_params = [
-    (64, 64, 3), # Output Shape
+    (64, 64, 3),  # Output Shape
     # Discriminator Args
     [
         [],
         {
-            "conv_params":[
+            "conv_params": [
                 ([8, 3], {"padding": "same", "strides": 2}),
                 ([4, 3], {"padding": "same", "strides": 2}),
                 ([3, 3], {"padding": "same", "strides": 2})
@@ -65,6 +65,7 @@ gan_params = [
         }
     ],
 ]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="File for running VAE")
@@ -103,11 +104,19 @@ def get_iter(generator, kwargs):
     return f
 
 
-def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10, class_mode=None):
+def load_data(
+        directory,
+        target_shape=(
+            64,
+            64,
+            3),
+    save_image=False,
+    batch_size=100,
+        class_mode=None):
     save_dir = "./modified-faces" if save_image else None
     image_gen = ImageDataGenerator(
         horizontal_flip=True,
-        rescale=1.0/255,
+        rescale=1.0 / 255,
         validation_split=0.2
     )
     iter_kwargs = {
@@ -122,7 +131,12 @@ def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
         "batch_size": batch_size
     }
     img_iter_gen = get_iter(image_gen, iter_kwargs)
-    output_signature = (tf.TensorSpec(shape=(None, *target_shape), dtype=tf.float32))
+    output_signature = (
+        tf.TensorSpec(
+            shape=(
+                None,
+                *target_shape),
+            dtype=tf.float32))
     img_dataset = Dataset.from_generator(
         img_iter_gen,
         output_signature=output_signature
@@ -130,7 +144,14 @@ def load_data(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     return img_dataset
 
 
-def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=10):
+def train_vae(
+        directory,
+        target_shape=(
+            64,
+            64,
+            3),
+    save_image=False,
+        batch_size=10):
     img_dataset = load_data(
         directory,
         target_shape=target_shape,
@@ -141,14 +162,14 @@ def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     optimizer = RMSprop(learning_rate=1e-3)
     early_stop = EarlyStopping(
         monitor='reconstruction_loss',
-        min_delta=100,
-        patience=10,
+        min_delta=10,
+        patience=30,
         restore_best_weights=True
     )
     autoencoder.compile(optimizer=optimizer, run_eagerly=True)
     history = autoencoder.fit(
         x=img_dataset,
-        steps_per_epoch=math.ceil(dataset_size/batch_size),
+        steps_per_epoch=math.ceil(dataset_size / batch_size),
         epochs=100,
         callbacks=[early_stop]
     )
@@ -157,7 +178,14 @@ def train_vae(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     return autoencoder, history
 
 
-def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=100):
+def train_gan(
+        directory,
+        target_shape=(
+            64,
+            64,
+            3),
+    save_image=False,
+        batch_size=100):
     img_dataset = load_data(
         directory,
         target_shape=target_shape,
@@ -169,7 +197,7 @@ def train_gan(directory, target_shape=(64, 64, 3), save_image=False, batch_size=
     gan.compile(optimizer=optimizer, run_eagerly=True)
     history = gan.fit(
         x=img_dataset,
-        steps_per_epoch=math.ceil(dataset_size/batch_size),
+        steps_per_epoch=math.ceil(dataset_size / batch_size),
         epochs=150
     )
     gan.save_weights("models/gan_model.h5")
@@ -183,12 +211,20 @@ def generate_image(target_shape=(64, 64, 3), save_image=False):
     autoencoder.load_weights("models/vae_model.h5")
     return autoencoder.generate_image()
 
+
 def generate_image_gan(target_shape=(64, 64, 3)):
     gan = GAN(*gan_params)
-    gan.discriminator((gan((tf.random.uniform((1, gan.latent_len), minval=-1, maxval=1), None)), None))
+    gan.discriminator(
+        (gan((tf.random.uniform((1, gan.latent_len), minval=-1, maxval=1), None)), None))
     gan.compile(run_eagerly=True)
     gan.load_weights("models/gan_model.h5")
-    return gan((tf.random.uniform((1, gan.latent_len), minval=-1, maxval=1), None))
+    return gan(
+        (tf.random.uniform(
+            (1,
+             gan.latent_len),
+            minval=-1,
+            maxval=1),
+            None))
 
 
 def reconstruct_image(img, target_shape=(64, 64, 3)):
@@ -205,7 +241,7 @@ def get_largest_filenumber(files):
     for f in files:
         match = nums_regex.match(f)
         if match:
-                largest_num = max(int(match.group()), largest_num)
+            largest_num = max(int(match.group()), largest_num)
     return largest_num
 
 
@@ -213,21 +249,23 @@ def plot_losses(*args, file_dir="loss-curves"):
     for arg in args:
         plt.plot(range(len(arg)), arg)
     files = os.listdir(file_dir)
-    plt.savefig(f'./{file_dir}/loss_curve{get_largest_filenumber(files)+1}.png')
+    plt.savefig(
+        f'./{file_dir}/loss_curve{get_largest_filenumber(files)+1}.png')
 
 
 if __name__ == "__main__":
     args = parse_args()
     if args.train:
-        gan, history = train_gan(args.train, save_image=args.save_image, batch_size=100)
-        plot_losses(history["gen_loss"], history["disc_loss"])
+        vae, history = train_vae(
+            args.train, save_image=args.save_image, batch_size=100)
+#        plot_losses(history["gen_loss"], history["disc_loss"])
     elif args.test:
         image = np.asarray(Image.open(args.test)).astype(np.float32)
-        reconstruction = reconstruct_image(image/255)
+        reconstruction = reconstruct_image(image / 255)
         plt.imshow(reconstruction[0])
         plt.savefig("reconstruction.png")
     else:
         for i in range(args.image_count):
-            image = generate_image_gan().numpy()
+            image = generate_image().numpy()
             plt.imshow(image[0])
             plt.savefig(f"./generated-images/test{i}.png")

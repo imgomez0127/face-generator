@@ -11,10 +11,10 @@ import random
 import string
 import traceback
 import requests
-import matplotlib.pyplot as plt
 import PIL
 from PIL import Image
 from io import BytesIO
+
 
 def _load_key(file_name):
     with open(file_name, "r") as f:
@@ -23,13 +23,23 @@ def _load_key(file_name):
 
 
 def _load_args():
-    parser = argparse.ArgumentParser(description="Download images of a kpop stars")
-    parser.add_argument("number", type=int, help="Amount of images to download")
-    parser.add_argument("name", type=str, help="Kpop celeb to search images for")
+    parser = argparse.ArgumentParser(
+        description="Download images of a kpop stars")
+    parser.add_argument(
+        "number",
+        type=int,
+        help="Amount of images to download")
+    parser.add_argument(
+        "name",
+        type=str,
+        help="Kpop celeb to search images for")
     return parser.parse_args()
 
 
-def _get_thumbnail_urls(api_key: str, name: str, max_photo_amt:int) -> list[str]:
+def _get_thumbnail_urls(
+        api_key: str,
+        name: str,
+        max_photo_amt: int) -> list[str]:
     """ Uses google search engine to find image urls for given query
 
     This function utilizes a customized search engine from the google search
@@ -54,7 +64,7 @@ def _get_thumbnail_urls(api_key: str, name: str, max_photo_amt:int) -> list[str]
         "key": api_key,
         "searchType": "image",
         "q": name,
-        "start":1
+        "start": 1
     }
     thumbnail_urls = []
     while len(thumbnail_urls) < max_photo_amt:
@@ -65,9 +75,10 @@ def _get_thumbnail_urls(api_key: str, name: str, max_photo_amt:int) -> list[str]
             response = response_package.json()
             urls = [content["link"] for content in response["items"]]
             thumbnail_urls.extend(urls)
-            # Set query params to offset the next query so we can gather new images
+            # Set query params to offset the next query so we can gather new
+            # images
             params["start"] = response["queries"]["nextPage"][0]["startIndex"]
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             traceback.print_exc()
             print(f"Unable to query index {params['start']}")
             print("Saving currently queried images")
@@ -92,7 +103,8 @@ def _save_images(thumbnail_urls):
             image_bytes = requests.get(url)
             image_buf = BytesIO(image_bytes.content)
             image = Image.open(image_buf)
-            random_name = ''.join((random.choice(letters) for i in range(file_length)))
+            random_name = ''.join((random.choice(letters)
+                                  for i in range(file_length)))
             image.save(f'./training_images/{random_name}.png')
         except (PIL.UnidentifiedImageError, requests.exceptions.HTTPError):
             print(f"WARNING: Couldn't load image skipping url {url}")
