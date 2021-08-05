@@ -2,17 +2,15 @@
 A model to generate face images that would look like a kpopstar (similar to This Person Does not Exist)
 ## Current progress
 Generates a very very blurry image that almost represents a face (e.g. can see where the eyes and other facial features exist)
+Gathered more data and it seems to be producing better images for the VAE.
 ## Work in progress
-Switch to a more advanced generative model (e.g. more advanced VAE tailored to face generation or GAN)
-
-Current speculation is that in comparison to other face-datasets my dataset has multiple face angles which make it harder to generalize
-since the face location is not uniform and the face direction is not uniform
+Test gan on new dataset that has more images.
 
 ## Examples
-Sampled Image:
+Sampled Images:
 
 ![alt-text](https://i.imgur.com/HpZBpck.png)
-
+![alt-text](https://i.imgur.com/7WhwMTJ.png)
 On Reconstruction
 
 Refernce Image:
@@ -22,3 +20,7 @@ Refernce Image:
 Reconstruction Image:
 
 ![alt-text](https://i.imgur.com/PoUK7v0.png)
+
+
+## After collecting more data
+![alt-text](https://i.imgur.com/yPUUx8f.png)
